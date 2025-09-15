@@ -6,3 +6,4 @@ jupyter
 dask[complete] 
 pyarrow 
 fastparquet
+gensim

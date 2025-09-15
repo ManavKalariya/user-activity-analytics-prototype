@@ -2,17 +2,45 @@ import dask.dataframe as dd
 from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 import os
-from dask.distributed import Client, progress
-
-# ========== CONFIG ==========
-file_path = "raw-dataset/2019-Nov.csv"   # <-- adjust path
-use_sampling = True     # Set False for full run
-sample_frac = 0.01      # 1% of users for dev runs
-block_size = "128MB"    # partition size (controls memory usage)
-# ============================
+import time
+import argparse
+from dask.distributed import Client
+from dask.diagnostics import ProgressBar
 
 def main():
-    print("🚀 Starting preprocessing...")
+    # ========== CLI ARG PARSER ==========
+    parser = argparse.ArgumentParser(description="Preprocess audit logs dataset with Dask")
+    parser.add_argument("--fast", action="store_true", help="Run in fast (sampled) mode")
+    parser.add_argument("--full", action="store_true", help="Run in full dataset mode")
+    args = parser.parse_args()
+
+    if args.fast and args.full:
+        raise ValueError("❌ Please choose either --fast or --full, not both.")
+    elif args.fast:
+        fast_mode = True
+    elif args.full:
+        fast_mode = False
+    else:
+        print("⚠️ No mode specified. Defaulting to FAST mode.")
+        fast_mode = True
+    # ====================================
+
+    # Derived settings based on mode
+    if fast_mode:
+        use_sampling = True
+        sample_frac = 0.01     # 1% users for dev runs
+        block_size = "64MB"    # smaller partitions for quick runs
+        output_file = "processed/sessions_sampled.parquet"
+        mode = "FAST (Dev)"
+    else:
+        use_sampling = False
+        sample_frac = 1.0      # all users
+        block_size = "128MB"   # better for large dataset
+        output_file = "processed/sessions.parquet"
+        mode = "FULL (Production)"
+
+    start_time = time.time()
+    print(f"🚀 Starting preprocessing in {mode} mode...")
 
     # 1. Start Dask client (optimized for i5-1235U, 16 GB RAM)
     client = Client(
@@ -25,12 +53,12 @@ def main():
 
     # 2. Load dataset with tuned blocksize
     print("📂 Loading dataset...")
-    df = dd.read_csv(file_path, blocksize=block_size)
+    df = dd.read_csv("raw-dataset/2019-Nov.csv", blocksize=block_size)
 
     print("📋 Raw Data Sample:")
     print(df.head())   # triggers only a small preview
 
-    # 3. OPTIONAL SAMPLING (for dev runs)
+    # 3. OPTIONAL SAMPLING (if in fast mode)
     if use_sampling:
         print("🎯 Sampling users for dev run...")
         unique_users = df["user_id"].dropna().unique().compute()
@@ -68,15 +96,22 @@ def main():
     print("\n🔎 Processed Session Sample:")
     print(df.head(10))
 
-    # 8. Persist sessions for future use
+    # 8. Persist sessions for future use with ETA
     print("💾 Saving sessions to disk...")
-    output_path = "pre-processed/sessions_sampled.parquet" if use_sampling else "pre-processed/sessions.parquet"
+    os.makedirs("processed", exist_ok=True)
 
-    write_future = df.to_parquet(output_path, engine="pyarrow", overwrite=True, compute=False)
-    progress(write_future)  # show progress bar
-    write_future.compute()
+    write_future = df.to_parquet(output_file, engine="pyarrow", overwrite=True, compute=False)
 
-    print(f"✅ Sessions saved to {output_path}")
+    with ProgressBar(dt=1):  # live ETA updates
+        write_future.compute()
+
+    print(f"✅ Sessions saved to {output_file}")
+
+    # 9. Print elapsed time
+    end_time = time.time()
+    elapsed = end_time - start_time
+    mins, secs = divmod(elapsed, 60)
+    print(f"⏳ Total preprocessing time: {int(mins)} min {int(secs)} sec")
 
 if __name__ == "__main__":
     main()

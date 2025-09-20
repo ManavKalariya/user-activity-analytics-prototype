@@ -8,3 +8,8 @@ pyarrow
 fastparquet
 gensim
 seaborn
+tqdm
+torch 
+torchvision 
+torchaudio 
+--index-url https://download.pytorch.org/whl/cu121

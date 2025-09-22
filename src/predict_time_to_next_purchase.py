@@ -266,30 +266,30 @@ print(f"\n✅ Survival models and scaler saved to {output_dir}")
 
 print("\n--- Step 6: Predict and Visualize Probability Distribution ---")
 
-# Select a few interesting users to predict for
-# For example, let's pick 5 users from our survival dataset
-X_new = model_df.drop(columns=['duration', 'event_observed']).iloc[5:10]
+# Predict for all users in the survival dataset
+X_new = model_df.drop(columns=['duration', 'event_observed'])
 
-print(f"📊 Predicting time-to-purchase distribution for {len(X_new)} sample users...")
+print(f"📊 Predicting time-to-purchase distribution for all {len(X_new)} users...")
 
 # Predict the survival function using the Weibull model
 # This gives the probability of *not* having purchased by time `t`
-survival_prob = wft.predict_survival_function(X_new)
+survival_prob_all = wft.predict_survival_function(X_new)
 
 # The probability of purchase is 1 - survival probability
-purchase_prob = 1 - survival_prob
+purchase_prob_all = 1 - survival_prob_all
 
-# Plotting the results
+# Plotting the results for a small sample to keep the plot readable
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 plt.figure(figsize=(12, 7))
 sns.set_style("whitegrid")
-plt.plot(purchase_prob)
-plt.title('Predicted Probability of Next Purchase Over Time', fontsize=16)
+# Select first 5 from the full prediction set for plotting
+plt.plot(purchase_prob_all.iloc[:, :5])
+plt.title('Predicted Probability of Next Purchase Over Time (Sample of 5 Users)', fontsize=16)
 plt.xlabel('Days Since Last Purchase', fontsize=12)
 plt.ylabel('Probability of Having Purchased', fontsize=12)
-plt.legend(title='Sample User Index', labels=purchase_prob.columns)
+plt.legend(title='Sample User Index', labels=purchase_prob_all.columns[:5])
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 plt.tight_layout()
 
@@ -297,21 +297,20 @@ plt.tight_layout()
 output_plot_path = "analytics/plots/time_to_next_purchase_prob.png"
 os.makedirs(os.path.dirname(output_plot_path), exist_ok=True)
 plt.savefig(output_plot_path)
-print(f"\n✅ Probability distribution plot saved to: {output_plot_path}")
+print(f"\n✅ Sample probability distribution plot saved to: {output_plot_path}")
 
-# You can also predict the median time to next purchase
+# You can also predict the median time to next purchase for all users
 median_time_to_purchase = wft.predict_median(X_new)
-print("\nPredicted Median Time to Next Purchase (in days):")
-print(median_time_to_purchase)
+print("\nPredicted Median Time to Next Purchase (in days) for all users.")
 
 # --- SAVE PREDICTIONS TO CSV ---
 output_predictions_path = "analytics/predictions/time_to_next_purchase_predictions.csv"
 os.makedirs(os.path.dirname(output_predictions_path), exist_ok=True)
 # Add user_ids to the predictions for context
 predictions_df = median_time_to_purchase.to_frame(name='predicted_median_days')
-predictions_df['user_id'] = survival_df.iloc[5:10]['user_id'].values
+predictions_df['user_id'] = survival_df['user_id'].values
 predictions_df.to_csv(output_predictions_path)
-print(f"✅ Numerical predictions saved to: {output_predictions_path}")
+print(f"✅ All {len(predictions_df)} numerical predictions saved to: {output_predictions_path}")
 # --------------------------------
 
 print("\n--- Script Finished ---")
